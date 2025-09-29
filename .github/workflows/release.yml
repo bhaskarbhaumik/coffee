@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the current tag
+        CURRENT_TAG=$(git describe --tags --abbrev=0)
+        
+        # Get the previous tag
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${CURRENT_TAG}^)
+        
+        echo "Generating changelog from ${PREVIOUS_TAG} to ${CURRENT_TAG}"
+        
+        # Generate changelog
+        echo "## What's Changed" > changelog.md
+        echo "" >> changelog.md
+        
+        # Get commits between tags
+        git log --pretty=format:"* %s (%h)" ${PREVIOUS_TAG}..${CURRENT_TAG} >> changelog.md
+        
+        # Set output for use in next step
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat changelog.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Coffee Script ${{ github.ref_name }}
+        body: |
+          # Coffee Script ${{ github.ref_name }}
+          
+          ${{ steps.changelog.outputs.changelog }}
+          
+          ## Installation
+          
+          ```bash
+          pip install coffee-script==${{ github.ref_name }}
+          ```
+          
+          ## Usage
+          
+          ```bash
+          coffee
+          ```
+          
+          See the [README](https://github.com/bhaskarbhaumik/coffee/blob/main/README.md) for more details.
+        draft: false
+        prerelease: false
