@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Any
 from rich.panel import Panel
 from rich.table import Table
 
+from .theme import get_palette
+
 # Configuration constants
 BAR_CHARS: List[str] = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
 CACHE_DIR = Path.home() / ".cache" / "system_profile"
@@ -19,14 +21,6 @@ CACHE_TTL = 300  # 5 minutes
 WIDTH_FACTOR = 10
 MIN_HEIGHT = 1
 MAX_HEIGHT = 4
-
-# Styling constants
-BATTERY_OUTLINE_COLOR = "#666666"
-BATTERY_FILL_COLOR = "green on #333333"
-ICON_STYLE = "#ffff00"
-TITLE_STYLE = "#aaffaa"
-BORDER_STYLE = "dim green"
-UPDATED_TS_STYLE = "#666666"
 
 cache_mtime = 0.0
 
@@ -155,41 +149,47 @@ class PowerManager:
         return power_info
 
 
-def get_bar(percentage: int, height: int = 1) -> str:
+def get_bar(percentage: int, height: int = 1, is_charging: bool = False) -> str:
     """Generate a visual battery percentage bar.
-    
+
     Args:
         percentage: Battery percentage (0-100)
         height: Height of the bar in lines
-        
+        is_charging: Whether the battery is currently charging
+
     Returns:
         Formatted battery bar string with Rich markup
     """
+    palette = get_palette()
+
     # Ensure percentage is within valid range
     percentage = max(0, min(100, percentage))
-    
+
     if height < MIN_HEIGHT:
         height = MIN_HEIGHT
     elif height > MAX_HEIGHT:
         height = MAX_HEIGHT
-        
+
     width = WIDTH_FACTOR * height
     cap_width = int(float(height - 1) * 2.0 / 3.0) + 1
-    
-    bat = f"  [{BATTERY_OUTLINE_COLOR}]╭{'─' * width}╮[/{BATTERY_OUTLINE_COLOR}]\n"
-    
+
+    battery_outline = palette.battery_outline
+    battery_fill = palette.battery_fill_charging if is_charging else palette.battery_fill_discharging
+
+    bat = f"  [{battery_outline}]╭{'─' * width}╮[/{battery_outline}]\n"
+
     w1 = int(percentage * width / 100)
     w2 = percentage % 10
     w3 = width - w1 - 1
-    
+
     for i in range(height):
         if percentage == 100:
-            bat += f"  [{BATTERY_OUTLINE_COLOR}]│[/{BATTERY_OUTLINE_COLOR}][{BATTERY_FILL_COLOR}]{'█' * width}[/{BATTERY_FILL_COLOR}][{BATTERY_OUTLINE_COLOR}]│{'█' * cap_width}[/{BATTERY_OUTLINE_COLOR}]\n"
+            bat += f"  [{battery_outline}]│[/{battery_outline}][{battery_fill}]{'█' * width}[/{battery_fill}][{battery_outline}]│{'█' * cap_width}[/{battery_outline}]\n"
         else:
             fill_char = BAR_CHARS[min(w2, len(BAR_CHARS) - 1)]
-            bat += f"  [{BATTERY_OUTLINE_COLOR}]│[/{BATTERY_OUTLINE_COLOR}][{BATTERY_FILL_COLOR}]{'█' * w1}{fill_char}{' ' * w3}[/{BATTERY_FILL_COLOR}][{BATTERY_OUTLINE_COLOR}]│{'█' * cap_width}[/{BATTERY_OUTLINE_COLOR}]\n"
-    
-    bat += f"  [{BATTERY_OUTLINE_COLOR}]╰{'─' * width}╯[/{BATTERY_OUTLINE_COLOR}]"
+            bat += f"  [{battery_outline}]│[/{battery_outline}][{battery_fill}]{'█' * w1}{fill_char}{' ' * w3}[/{battery_fill}][{battery_outline}]│{'█' * cap_width}[/{battery_outline}]\n"
+
+    bat += f"  [{battery_outline}]╰{'─' * width}╯[/{battery_outline}]"
     return bat
 
 
@@ -215,100 +215,95 @@ def safe_get(data: Dict[str, Any], *keys: str, default: Any = None) -> Any:
 
 def get_power_visual(power_info: Dict[str, Any], height: int = 1) -> Panel:
     """Generate power status visual panel.
-    
+
     Args:
         power_info: Dictionary containing power information
         height: Height for the battery bar
-        
+
     Returns:
         Rich Panel containing formatted power information
     """
-    global cache_mtime, BATTERY_FILL_COLOR
-    
+    global cache_mtime
+    palette = get_palette()
+
     # Safely extract battery data
     battery_percent = safe_get(
-        power_info, "battery", "sppower_battery_charge_info", 
+        power_info, "battery", "sppower_battery_charge_info",
         "sppower_battery_state_of_charge", default=0
     )
-    
+
     # Ensure battery_percent is an integer
     try:
         battery_percent = int(battery_percent)
     except (ValueError, TypeError):
         battery_percent = 0
-    
+
     battery_charging = safe_get(
-        power_info, "battery", "sppower_battery_charge_info", 
+        power_info, "battery", "sppower_battery_charge_info",
         "sppower_battery_is_charging", default="FALSE"
     ) == "TRUE"
-    
+
     battery_warning = safe_get(
-        power_info, "battery", "sppower_battery_charge_info", 
+        power_info, "battery", "sppower_battery_charge_info",
         "sppower_battery_at_warn_level", default="FALSE"
     ) == "TRUE"
-    
-    # Update battery fill color based on charging status
-    if not battery_charging:
-        BATTERY_FILL_COLOR = "white on #333333"
-    else:
-        BATTERY_FILL_COLOR = "green on #333333"
-    
-    battery_icon = "[red]\uf071[/red]" if battery_warning else "[green]\uf05a[/green]"
-    battery_info = get_bar(battery_percent, height)
-    
+
+    battery_icon = f"[{palette.status_error}]\uf071[/{palette.status_error}]" if battery_warning else f"[{palette.status_success}]\uf05a[/{palette.status_success}]"
+    battery_info = get_bar(battery_percent, height, is_charging=battery_charging)
+
     if height > 1:
-        battery_info += f"\n{battery_icon} Battery is charged at [yellow]{battery_percent}%[/yellow]"
-        battery_info += f"\n{'[bold green]\U000f008f[/bold green]' if battery_charging else '[dim red]\U000f008c[/dim red]'} Battery is currently [yellow]{'charging' if battery_charging else 'discharging'}[/yellow]"
+        battery_info += f"\n{battery_icon} Battery is charged at [{palette.accent_yellow}]{battery_percent}%[/{palette.accent_yellow}]"
+        battery_info += f"\n{'[bold ' + palette.status_success + ']\U000f008f[/bold ' + palette.status_success + ']' if battery_charging else '[dim ' + palette.status_error + ']\U000f008c[/dim ' + palette.status_error + ']'} Battery is currently [{palette.accent_yellow}]{'charging' if battery_charging else 'discharging'}[/{palette.accent_yellow}]"
     else:
-        battery_info += f"\n {battery_icon} [yellow]{battery_percent}%[/yellow] Charged"
-        battery_info += f"\n {'[bold green]\U000f008f[/bold green]' if battery_charging else '[dim red]\U000f008c[/dim red]'} [yellow]{'Charging' if battery_charging else 'Discharging'}[/yellow]"
+        battery_info += f"\n {battery_icon} [{palette.accent_yellow}]{battery_percent}%[/{palette.accent_yellow}] Charged"
+        battery_info += f"\n {'[bold ' + palette.status_success + ']\U000f008f[/bold ' + palette.status_success + ']' if battery_charging else '[dim ' + palette.status_error + ']\U000f008c[/dim ' + palette.status_error + ']'} [{palette.accent_yellow}]{'Charging' if battery_charging else 'Discharging'}[/{palette.accent_yellow}]"
 
     l = 22
     ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(cache_mtime))
-    power_updated = f"{battery_info}\n[{BORDER_STYLE}]{'─' * l}[/{BORDER_STYLE}]\n"
-    power_updated += f"[yellow]\ueb7c[/yellow] [bold]Last Updated[/bold]\n  [{UPDATED_TS_STYLE}]{ts}[/{UPDATED_TS_STYLE}]"
+    power_updated = f"{battery_info}\n[{palette.border_primary}]{'─' * l}[/{palette.border_primary}]\n"
+    power_updated += f"[{palette.accent_yellow}]\ueb7c[/{palette.accent_yellow}] [bold]Last Updated[/bold]\n  [{palette.text_dim}]{ts}[/{palette.text_dim}]"
 
     # Battery health information
-    battery_health_info_str = "[yellow]\uf0f1[/yellow] [bold]Battery Health[/bold]\n"
+    battery_health_info_str = f"[{palette.accent_yellow}]\uf0f1[/{palette.accent_yellow}] [bold]Battery Health[/bold]\n"
     health_status = safe_get(
-        power_info, "battery", "sppower_battery_health_info", 
+        power_info, "battery", "sppower_battery_health_info",
         "sppower_battery_health", default="Unknown"
     )
     health_status_display = (
-        "[green]\U000f1211[/green] Good"
+        f"[{palette.status_success}]\U000f1211[/{palette.status_success}] Good"
         if health_status == "Good"
-        else f"[red]\U000f0083[/red] {health_status}"
+        else f"[{palette.status_error}]\U000f0083[/{palette.status_error}] {health_status}"
     )
-    battery_health_info_str += f"  [dim][blue]\U000f0091[/blue] Status........[/dim]{health_status_display}\n"
-    
+    battery_health_info_str += f"  [dim][{palette.accent_blue}]\U000f0091[/{palette.accent_blue}] Status........[/dim]{health_status_display}\n"
+
     max_capacity = safe_get(
-        power_info, "battery", "sppower_battery_health_info", 
+        power_info, "battery", "sppower_battery_health_info",
         "sppower_battery_health_maximum_capacity", default="N/A"
     )
     cycle_count = safe_get(
-        power_info, "battery", "sppower_battery_health_info", 
+        power_info, "battery", "sppower_battery_health_info",
         "sppower_battery_cycle_count", default="N/A"
     )
-    
-    battery_health_info_str += f"  [dim][blue]\U000f17e0[/blue] Max Capacity..[/dim][magenta]{max_capacity}[/magenta]\n"
-    battery_health_info_str += f"  [dim][blue]\U000f1834[/blue] Cycle Count...[/dim][magenta]{cycle_count}[/magenta]"
+
+    battery_health_info_str += f"  [dim][{palette.accent_blue}]\U000f17e0[/{palette.accent_blue}] Max Capacity..[/dim][{palette.accent_magenta}]{max_capacity}[/{palette.accent_magenta}]\n"
+    battery_health_info_str += f"  [dim][{palette.accent_blue}]\U000f1834[/{palette.accent_blue}] Cycle Count...[/dim][{palette.accent_magenta}]{cycle_count}[/{palette.accent_magenta}]"
 
     # AC charger information
     charger_connected = safe_get(
         power_info, "ac_charger", "sppower_battery_charger_connected", default="FALSE"
     ) == "TRUE"
     charger_status = (
-        "[green]\U000f06a5[/green] Yes"
+        f"[{palette.status_success}]\U000f06a5[/{palette.status_success}] Yes"
         if charger_connected
-        else "[red]\U000f06a6[/red] No"
+        else f"[{palette.status_error}]\U000f06a6[/{palette.status_error}] No"
     )
-    ac_charger_info = "[yellow]\ueb2d[/yellow] [bold]AC Charger[/bold]\n"
-    ac_charger_info += f"  [dim][blue]\U000f0425[/blue] Connected?..[/dim] {charger_status}\n"
-    
+    ac_charger_info = f"[{palette.accent_yellow}]\ueb2d[/{palette.accent_yellow}] [bold]AC Charger[/bold]\n"
+    ac_charger_info += f"  [dim][{palette.accent_blue}]\U000f0425[/{palette.accent_blue}] Connected?..[/dim] {charger_status}\n"
+
     charger_watts = safe_get(
         power_info, "ac_charger", "sppower_ac_charger_watts", default="N/A"
     )
-    ac_charger_info += f"  [dim][blue]\uf0e7[/blue] Wattage.....[/dim] [magenta]{charger_watts} Watts[/magenta]"
+    ac_charger_info += f"  [dim][{palette.accent_blue}]\uf0e7[/{palette.accent_blue}] Wattage.....[/dim] [{palette.accent_magenta}]{charger_watts} Watts[/{palette.accent_magenta}]"
 
     # Create table
     battery_table = Table(
@@ -316,20 +311,20 @@ def get_power_visual(power_info: Dict[str, Any], height: int = 1) -> Panel:
         show_lines=False,
         show_edge=False,
         expand=False,
-        border_style=BORDER_STYLE,
+        border_style=palette.border_primary,
     )
     battery_table.add_column("Battery Info", overflow="none", justify="left")
     battery_table.add_column("Power Source", overflow="none", justify="left")
 
     l = 26
-    hr = f"[{BORDER_STYLE}]{'─' * l}[/{BORDER_STYLE}]"
+    hr = f"[{palette.border_primary}]{'─' * l}[/{palette.border_primary}]"
     power_info_str = f"{battery_health_info_str}\n{hr}\n{ac_charger_info}"
     battery_table.add_row(power_updated, power_info_str)
 
     return Panel(
         battery_table,
-        title=f"[{ICON_STYLE}]\uf242[/{ICON_STYLE}]  [{TITLE_STYLE}]Battery Status[/{TITLE_STYLE}]",
-        border_style=BORDER_STYLE,
+        title=f"[{palette.text_highlight}]\uf242[/{palette.text_highlight}]  [{palette.accent_green}]Battery Status[/{palette.accent_green}]",
+        border_style=palette.border_primary,
         padding=(0, 1),
         expand=False,
     )

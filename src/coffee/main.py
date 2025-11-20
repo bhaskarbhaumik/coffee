@@ -29,10 +29,12 @@ from rich_argparse_plus import RichHelpFormatterPlus
 
 from .power import PowerManager, get_power_visual, get_power_data
 from .network import NetworkManager, get_network_panel
+from .theme import get_palette, refresh_theme
 
 # Constants
 __version__ = "0.1.0"
 
+CLEAR_SCREEN = True
 SECONDS_PER_YEAR = 31_536_000
 REFRESH_PER_SECOND = 4
 SLEEP_INTERVAL = 0.4
@@ -87,21 +89,22 @@ STOP_EVENT = threading.Event()
 
 def n2s(n: int, d: int) -> str:
     """Convert a number `n` to a zero-padded string of `d` width with styling.
-    
+
     Args:
         n: The number to format
         d: The desired width for zero-padding
-        
+
     Returns:
         A formatted string with Rich markup for styling
     """
+    palette = get_palette()
     padded = f"{n:0{d}d}"
     m = re.match(r"^(0*)($|[1-9]\d*$)", padded)
     if not m:
         # Fallback if regex fails
-        return f"[bold cyan]{padded}[/bold cyan]"
-    s = f"[#666666]{m.group(1)}[/#666666]" if m.group(1) else ""
-    s += f"[bold cyan]{m.group(2)}[/bold cyan]" if m.group(2) else ""
+        return f"[{palette.accent_cyan}]{padded}[/{palette.accent_cyan}]"
+    s = f"[{palette.text_dim}]{m.group(1)}[/{palette.text_dim}]" if m.group(1) else ""
+    s += f"[{palette.accent_cyan}]{m.group(2)}[/{palette.accent_cyan}]" if m.group(2) else ""
     return s
 
 
@@ -270,6 +273,8 @@ def generate_ascii_time(time_str: str) -> str:
 
 def main() -> None:
     """Main function to run the coffee script."""
+    global DEFAULT_TZ, CONSOLE, ERROR_CONSOLE, REFRESH_PER_SECOND, TIME_FORMAT, DATE_FORMAT, BOOT_TIME, STOP_EVENT
+
     try:
         threading.Thread(target=wait_for_keypress, daemon=True).start()
         tz: str = os.environ.get("TZ", DEFAULT_TZ)
@@ -277,7 +282,8 @@ def main() -> None:
         configure_power_settings()
         caffeinate_process = start_caffeinate()
 
-        CONSOLE.clear()
+        if CLEAR_SCREEN:
+            CONSOLE.clear()
         panel_power = get_power_visual_safe()
         panel_network = get_network_panel_safe()
         beats = 0
@@ -286,6 +292,7 @@ def main() -> None:
         memory_mb = process.memory_info().rss / 1024**2
         last_power_update = ct
         last_network_update = ct
+        last_theme_check = ct  # Track when we last checked for theme changes
 
         with Live(console=CONSOLE, refresh_per_second=REFRESH_PER_SECOND) as live:
             prev_width, prev_height = (
@@ -302,8 +309,20 @@ def main() -> None:
                         # Detect screen dimension changes
                         curr_width, curr_height = CONSOLE.size.width, CONSOLE.size.height
                         if (curr_width, curr_height) != (prev_width, prev_height):
-                            CONSOLE.clear()
+                            if CLEAR_SCREEN:
+                                CONSOLE.clear()
                             prev_width, prev_height = curr_width, curr_height
+
+                        # Check for theme changes every 5 seconds
+                        if ct - last_theme_check >= 5:
+                            last_theme_check = ct
+                            if refresh_theme():
+                                # Theme changed! Regenerate all panels immediately
+                                if CLEAR_SCREEN:
+                                    CONSOLE.clear()
+                                panel_power = get_power_visual_safe()
+                                panel_network = get_network_panel_safe()
+                                # Note: panel_time is regenerated every loop iteration below
 
                     now = datetime.now(pytz.timezone(tz))
                     ist_now = now.astimezone(pytz.timezone("Asia/Kolkata"))
@@ -315,19 +334,20 @@ def main() -> None:
                     big_time = generate_ascii_time(time_str)
                     date_str = now.strftime(DATE_FORMAT)
                     uptime = get_uptime_str(up_for)
-                    
+
+                    palette = get_palette()
                     panel_time = Panel(
                         (
                             f"{big_time}\n"
-                            f"[dim green]{UPTIME_HDR}  ——————  I S T  🇮🇳  —————[/dim green]\n"
-                            f"[cyan]{uptime}[/cyan]       [#ffffff]{ist_str}[/#ffffff]\n"
-                            f"[#666666]{UPTIME_STR}[/#666666]  [#ffff00]{ist_dt_str}[/#ffff00]"
+                            f"[dim {palette.accent_green}]{UPTIME_HDR}  ——————  I S T  🇮🇳  —————[/dim {palette.accent_green}]\n"
+                            f"[{palette.accent_cyan}]{uptime}[/{palette.accent_cyan}]       [{palette.text_primary}]{ist_str}[/{palette.text_primary}]\n"
+                            f"[{palette.text_dim}]{UPTIME_STR}[/{palette.text_dim}]  [{palette.text_highlight}]{ist_dt_str}[/{palette.text_highlight}]"
                         ),
                         expand=False,
-                        border_style="dim green",
-                        title=f"\uf0f4  [#ffff00]{date_str}[/#ffff00]",
+                        border_style=palette.border_primary,
+                        title=f"\uf0f4  [{palette.text_highlight}]{date_str}[/{palette.text_highlight}]",
                         title_align="center",
-                        subtitle=f"[#666666]\U000f035b {memory_mb:.2f} MB[/#666666] — [#666666]\U000f124a {tz}[/#666666]",
+                        subtitle=f"[{palette.text_dim}]\U000f035b {memory_mb:.2f} MB[/{palette.text_dim}] — [{palette.text_dim}]\U000f124a {tz}[/{palette.text_dim}]",
                         subtitle_align="right",
                     )
 
@@ -362,7 +382,8 @@ def main() -> None:
                 caffeinate_process.terminate()
             except:
                 pass
-        ERROR_CONSOLE.clear()
+        if CLEAR_SCREEN:
+            ERROR_CONSOLE.clear()
 
 
 if __name__ == "__main__":

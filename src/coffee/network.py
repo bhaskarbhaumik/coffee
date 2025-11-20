@@ -16,10 +16,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-# Global styling constants to match original implementation
-icon_style: str = "#ffff00"
-title_style: str = "#aaffaa"
-border_style: str = "#336633"
+from .theme import get_palette
 
 
 @dataclass
@@ -52,7 +49,7 @@ def get_network_panel() -> Panel:
     Active interfaces (non-empty IPv4) appear first in normal text,
     followed by inactive interfaces (dim).
     """
-    global icon_style, title_style, border_style
+    palette = get_palette()
 
     try:
         # 1) Fetch JSON data from system_profiler
@@ -125,21 +122,21 @@ def get_network_panel() -> Panel:
 
     # 5) Create a Rich table
     table = Table(
-        collapse_padding=True, 
-        padding=[0, 1], 
-        pad_edge=False, 
-        show_header=True, 
-        show_footer=False, 
-        show_edge=False, 
-        show_lines=False, 
-        row_styles=["on #2a2a2a", "on #202030"], 
-        box=box.MINIMAL, 
-        border_style=border_style
+        collapse_padding=True,
+        padding=[0, 1],
+        pad_edge=False,
+        show_header=True,
+        show_footer=False,
+        show_edge=False,
+        show_lines=False,
+        row_styles=[palette.table_row_even, palette.table_row_odd],
+        box=box.MINIMAL,
+        border_style=palette.border_secondary
     )
 
-    table.add_column("Interface Type", style="cyan", no_wrap=True)
-    table.add_column("Interface", style="magenta", no_wrap=True, justify="center")
-    table.add_column("IPv4 Address", style="green", no_wrap=True, justify="center")
+    table.add_column("Interface Type", style=palette.accent_cyan, no_wrap=True)
+    table.add_column("Interface", style=palette.accent_magenta, no_wrap=True, justify="center")
+    table.add_column("IPv4 Address", style=palette.accent_green, no_wrap=True, justify="center")
 
     # 6) Add rows to the table: active first (normal), then inactive (dim)
     row_num = 1
@@ -164,9 +161,9 @@ def get_network_panel() -> Panel:
 
     # 7) Print the table
     return Panel(
-        table, 
-        title=f"[#ffff00]\U000f06f3[/#ffff00]  [bright_green]Network Interfaces[/bright_green]", 
-        border_style="dim green", 
+        table,
+        title=f"[{palette.text_highlight}]\U000f06f3[/{palette.text_highlight}]  [{palette.accent_green}]Network Interfaces[/{palette.accent_green}]",
+        border_style=palette.border_primary,
         expand=False
     )
 

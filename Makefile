@@ -1,6 +1,6 @@
 # Makefile for Coffee Script development
 
-.PHONY: help setup test lint format clean build security all install run docs
+.PHONY: help setup test lint format clean build security all install run docs git-status git-diff git-log git-branch git-commit git-push git-pull git-sync git-add-commit git-acp
 
 # Default target
 help:
@@ -29,6 +29,18 @@ help:
 	@echo "Application:"
 	@echo "  run       - Run the coffee script"
 	@echo "  docs      - Generate documentation"
+	@echo ""
+	@echo "Git Management:"
+	@echo "  git-status      - Show git status"
+	@echo "  git-diff        - Show uncommitted changes"
+	@echo "  git-log         - Show recent commits"
+	@echo "  git-branch      - Show current branch and branches"
+	@echo "  git-commit      - Commit staged changes (use MSG='commit message')"
+	@echo "  git-push        - Push changes to remote"
+	@echo "  git-pull        - Pull changes from remote"
+	@echo "  git-sync        - Pull, then push changes"
+	@echo "  git-add-commit  - Add all and commit (use MSG='commit message')"
+	@echo "  git-acp         - Add, commit, and push (use MSG='commit message')"
 
 # Setup development environment
 setup:
@@ -129,3 +141,91 @@ release-check: all
 # Quick development cycle
 quick: format test
 	@echo "⚡ Quick development cycle complete!"
+
+# ==========================================
+# Git Management
+# ==========================================
+
+# Show git status
+git-status:
+	@echo "📊 Git Status:"
+	@git status
+
+# Show uncommitted changes
+git-diff:
+	@echo "📝 Uncommitted changes:"
+	@git diff
+	@echo ""
+	@echo "📝 Staged changes:"
+	@git diff --cached
+
+# Show recent commits
+git-log:
+	@echo "📜 Recent commits:"
+	@git log --oneline --graph --decorate -10
+
+# Show current branch and all branches
+git-branch:
+	@echo "🌿 Current branch:"
+	@git branch --show-current
+	@echo ""
+	@echo "🌿 All branches:"
+	@git branch -a
+
+# Commit staged changes (requires MSG variable)
+git-commit:
+	@if [ -z "$(MSG)" ]; then \
+		echo "❌ Error: Please provide a commit message using MSG='your message'"; \
+		echo "   Example: make git-commit MSG='Add new feature'"; \
+		exit 1; \
+	fi
+	@echo "💾 Committing changes..."
+	@git commit -m "$(MSG)"
+	@echo "✅ Changes committed!"
+
+# Push changes to remote
+git-push:
+	@echo "⬆️  Pushing changes to remote..."
+	@git push
+	@echo "✅ Changes pushed!"
+
+# Pull changes from remote
+git-pull:
+	@echo "⬇️  Pulling changes from remote..."
+	@git pull
+	@echo "✅ Changes pulled!"
+
+# Sync with remote (pull then push)
+git-sync:
+	@echo "🔄 Syncing with remote..."
+	@git pull
+	@git push
+	@echo "✅ Sync complete!"
+
+# Add all changes and commit (shortcut)
+git-add-commit:
+	@if [ -z "$(MSG)" ]; then \
+		echo "❌ Error: Please provide a commit message using MSG='your message'"; \
+		echo "   Example: make git-add-commit MSG='Add new feature'"; \
+		exit 1; \
+	fi
+	@echo "➕ Adding all changes..."
+	@git add .
+	@echo "💾 Committing changes..."
+	@git commit -m "$(MSG)"
+	@echo "✅ Changes added and committed!"
+
+# Complete git workflow: add, commit, and push
+git-acp:
+	@if [ -z "$(MSG)" ]; then \
+		echo "❌ Error: Please provide a commit message using MSG='your message'"; \
+		echo "   Example: make git-acp MSG='Add new feature'"; \
+		exit 1; \
+	fi
+	@echo "➕ Adding all changes..."
+	@git add .
+	@echo "💾 Committing changes..."
+	@git commit -m "$(MSG)"
+	@echo "⬆️  Pushing changes..."
+	@git push
+	@echo "✅ Complete! Changes added, committed, and pushed!"
