@@ -29,6 +29,8 @@ from rich_argparse_plus import RichHelpFormatterPlus
 
 from .power import PowerManager, get_power_visual, get_power_data
 from .network import NetworkManager, get_network_panel
+from .splash import get_splash_panel
+from .computer import regenerate_computer_cache, get_computer_panel
 from .theme import get_palette, refresh_theme
 
 # Constants
@@ -237,7 +239,7 @@ def get_power_visual_safe() -> Panel:
 
 def get_network_panel_safe() -> Panel:
     """Safely get the network panel.
-    
+
     Returns:
         A Rich Panel with network information or error message
     """
@@ -246,6 +248,32 @@ def get_network_panel_safe() -> Panel:
     except Exception as e:
         ERROR_CONSOLE.print(f"⚠️  Error while fetching network panel: {e}")
         return Panel("⚠️  Error fetching network data", border_style="red")
+
+
+def get_splash_panel_safe() -> Panel:
+    """Safely get the splash panel.
+
+    Returns:
+        A Rich Panel with splash image or error message
+    """
+    try:
+        return get_splash_panel()
+    except Exception as e:
+        ERROR_CONSOLE.print(f"⚠️  Error while fetching splash panel: {e}")
+        return Panel("⚠️  Error fetching splash image", border_style="red")
+
+
+def get_computer_panel_safe(computer_data) -> Panel:
+    """Safely get the computer panel.
+
+    Returns:
+        A Rich Panel with computer information or error message
+    """
+    try:
+        return get_computer_panel(computer_data)
+    except Exception as e:
+        ERROR_CONSOLE.print(f"⚠️  Error while fetching computer panel: {e}")
+        return Panel("⚠️  Error fetching computer data", border_style="red")
 
 
 def generate_ascii_time(time_str: str) -> str:
@@ -282,8 +310,13 @@ def main() -> None:
         configure_power_settings()
         caffeinate_process = start_caffeinate()
 
+        # Regenerate computer info cache once before the loop
+        computer_data = regenerate_computer_cache()
+
         if CLEAR_SCREEN:
             CONSOLE.clear()
+        panel_splash = get_splash_panel_safe()
+        panel_computer = get_computer_panel_safe(computer_data)
         panel_power = get_power_visual_safe()
         panel_network = get_network_panel_safe()
         beats = 0
@@ -320,6 +353,8 @@ def main() -> None:
                                 # Theme changed! Regenerate all panels immediately
                                 if CLEAR_SCREEN:
                                     CONSOLE.clear()
+                                panel_splash = get_splash_panel_safe()
+                                panel_computer = get_computer_panel_safe(computer_data)
                                 panel_power = get_power_visual_safe()
                                 panel_network = get_network_panel_safe()
                                 # Note: panel_time is regenerated every loop iteration below
@@ -359,7 +394,8 @@ def main() -> None:
                         last_network_update = ct
                         panel_network = get_network_panel_safe()
 
-                    cols = Columns([panel_network, panel_power, panel_time])
+                    # cols = Columns([panel_splash, panel_network, panel_power, panel_time])
+                    cols = Columns([panel_computer, panel_network, panel_power, panel_time])
                     live.update(Align.right(cols), refresh=True)
                     time.sleep(SLEEP_INTERVAL)
                     beats += 1
