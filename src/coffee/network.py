@@ -38,16 +38,19 @@ class NetworkManager:
         """Initialize the NetworkManager."""
         pass
     
-    def get_network_panel(self) -> Panel:
+    def get_network_panel(self, details: str = "terse") -> Panel:
         """Get network panel using the original implementation."""
-        return get_network_panel()
+        return get_network_panel(details=details)
 
-def get_network_panel() -> Panel:
+def get_network_panel(details: str = "terse") -> Panel:
     """
     Fetch network interface data from system_profiler (JSON), parse out
     Interface Type, Name, IPv4, IPv6, MAC, and Order, then display in a Rich table.
-    Active interfaces (non-empty IPv4) appear first in normal text,
-    followed by inactive interfaces (dim).
+
+    details="all":   Active interfaces (non-empty IPv4) appear first in normal text,
+                     followed by inactive interfaces (dim).
+    details="terse": Always shows Wi-Fi (with 'n/a' if no IPv4) plus all other
+                     interfaces with a valid IPv4. Pads to at least 6 table rows.
     """
     palette = get_palette()
 
@@ -138,26 +141,54 @@ def get_network_panel() -> Panel:
     table.add_column("Interface", style=palette.accent_magenta, no_wrap=True, justify="center")
     table.add_column("IPv4 Address", style=palette.accent_green, no_wrap=True, justify="center")
 
-    # 6) Add rows to the table: active first (normal), then inactive (dim)
-    row_num = 1
-    num_rows = len(active_interfaces)
-    for info in active_interfaces:
-        table.add_row(
-            info["type"],
-            info["name"],
-            info["ipv4"],
-            style="none",
-            end_section=(row_num == num_rows)
-        )
-        row_num += 1
+    # 6) Add rows based on detail level
+    MIN_ROWS = 6
 
-    for info in inactive_interfaces:
-        table.add_row(
-            info["type"],
-            info["name"],
-            info["ipv4"],
-            style="dim"
-        )
+    if details == "all":
+        row_num = 1
+        num_rows = len(active_interfaces)
+        for info in active_interfaces:
+            table.add_row(
+                info["type"],
+                info["name"],
+                info["ipv4"],
+                style="none",
+                end_section=(row_num == num_rows)
+            )
+            row_num += 1
+
+        for info in inactive_interfaces:
+            table.add_row(
+                info["type"],
+                info["name"],
+                info["ipv4"],
+                style="dim"
+            )
+    else:  # terse
+        wifi = next((i for i in interfaces_info if i["type"] == "Wi-Fi"), None)
+
+        terse_rows = []
+        # Wi-Fi always first; show "n/a" when it has no IPv4
+        if wifi is not None:
+            terse_rows.append({**wifi, "ipv4": wifi["ipv4"] or "n/a"})
+        # All other active interfaces (Wi-Fi already included if it was active)
+        for info in active_interfaces:
+            if wifi is not None and info["name"] == wifi["name"]:
+                continue
+            terse_rows.append(info)
+
+        num_rows = len(terse_rows)
+        for idx, info in enumerate(terse_rows):
+            table.add_row(
+                info["type"],
+                info["name"],
+                info["ipv4"],
+                end_section=(idx == num_rows - 1 and num_rows >= MIN_ROWS)
+            )
+
+        # Pad to minimum row count
+        for _ in range(max(0, MIN_ROWS - num_rows)):
+            table.add_row("", "", "")
 
     # 7) Print the table
     return Panel(
